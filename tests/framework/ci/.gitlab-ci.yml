@@ -1,0 +1,72 @@
+# ============================================================================
+# GitLab CI — Playwright Test Pipeline
+# ============================================================================
+#
+# Runs Playwright tests in GitLab CI with:
+#   - Parallel sharding
+#   - Artifact collection (HTML report, traces)
+#   - Staging smoke test job
+#
+# ============================================================================
+
+image: mcr.microsoft.com/playwright:v1.50.0-noble
+
+stages:
+  - test
+  - report
+
+variables:
+  CI: "true"
+  TEST_ENV: local
+
+# ── Test job with sharding ─────────────────────────────────────────
+playwright-tests:
+  stage: test
+  parallel: 4
+  script:
+    - cd healthhub-app/tests
+    - npm ci
+    - cd ../backend && npm ci && cd ../frontend && npm ci && cd ../tests
+    - npx playwright test --config=framework/config/playwright.config.js
+      --project=chromium
+      --shard=$CI_NODE_INDEX/$CI_NODE_TOTAL
+  artifacts:
+    when: always
+    paths:
+      - healthhub-app/tests/framework/test-results/
+      - healthhub-app/tests/blob-report/
+    expire_in: 7 days
+
+# ── Merge reports ──────────────────────────────────────────────────
+merge-reports:
+  stage: report
+  needs: [playwright-tests]
+  when: always
+  script:
+    - cd healthhub-app/tests
+    - npm ci
+    - npx playwright merge-reports --reporter html ./blob-report
+  artifacts:
+    when: always
+    paths:
+      - healthhub-app/tests/playwright-report/
+    expire_in: 14 days
+
+# ── Staging smoke tests (manual trigger) ───────────────────────────
+staging-smoke:
+  stage: test
+  rules:
+    - when: manual
+  variables:
+    TEST_ENV: staging
+  script:
+    - cd healthhub-app/tests
+    - npm ci
+    - npx playwright install --with-deps chromium
+    - npx playwright test --config=framework/config/playwright.config.js
+      --project=chromium --grep @smoke
+  artifacts:
+    when: always
+    paths:
+      - healthhub-app/tests/framework/playwright-report/
+    expire_in: 7 days

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Visual regression failures",
+    "messageRegex": ".*[Ss]napshot.*|.*[Ss]creenshot.*",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "API failures",
+    "messageRegex": ".*API.*|.*fetch.*|.*request.*|.*404.*|.*500.*",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Accessibility violations",
+    "messageRegex": ".*axe.*|.*a11y.*|.*violation.*|.*accessible.*",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Product defects",
+    "messageRegex": ".*",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Test infrastructure problems",
+    "messageRegex": ".*",
+    "matchedStatuses": ["broken"]
+  },
+  {
+    "name": "Flaky tests",
+    "matchedStatuses": ["passed", "failed"],
+    "flaky": true
+  }
+]

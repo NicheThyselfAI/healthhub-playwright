@@ -1,0 +1,40 @@
+- dialog "New Appointment":
+  - heading "New Appointment" [level=2]
+  - button "Close modal":
+    - img
+  - text: ""
+  - textbox "Title*":
+    - /placeholder: e.g., Annual Physical
+  - text: ""
+  - combobox "Type":
+    - option "Select an option" [disabled]
+    - option "General" [selected]
+    - option "Physical"
+    - option "Mental Health"
+    - option "Follow-up"
+  - img
+  - text: ""
+  - textbox "Date*"
+  - text: ""
+  - textbox "Time*"
+  - text: ""
+  - combobox "Duration":
+    - option "Select an option" [disabled]
+    - option /\d+ minutes/
+    - option /\d+ minutes/ [selected]
+    - option /\d+ minutes/
+    - option "1 hour"
+    - option "1.5 hours"
+  - img
+  - text: ""
+  - textbox "Provider":
+    - /placeholder: e.g., Dr. Sarah Johnson
+  - text: ""
+  - textbox "Location":
+    - /placeholder: e.g., Main Clinic, Room 204
+  - text: ""
+  - textbox "Additional details about this appointment..."
+  - text: ""
+  - textbox "Personal notes or reminders..."
+  - button "Cancel"
+  - button "Create Appointment"

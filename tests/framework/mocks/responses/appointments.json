@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "title": "Annual Physical Exam",
+      "appointment_date": "2026-03-15",
+      "appointment_time": "09:00",
+      "duration_minutes": 60,
+      "type": "physical",
+      "status": "scheduled",
+      "provider": "Dr. Smith",
+      "location": "Main Clinic, Room 201",
+      "description": "Routine annual physical examination",
+      "notes": null,
+      "created_at": "2026-02-01T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "title": "Follow-up Consultation",
+      "appointment_date": "2026-03-20",
+      "appointment_time": "14:30",
+      "duration_minutes": 30,
+      "type": "followup",
+      "status": "scheduled",
+      "provider": "Dr. Johnson",
+      "location": "Main Clinic, Room 105",
+      "description": "Follow-up on blood work results",
+      "notes": "Bring lab results",
+      "created_at": "2026-02-05T14:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "title": "Mental Health Check-in",
+      "appointment_date": "2026-03-25",
+      "appointment_time": "11:00",
+      "duration_minutes": 45,
+      "type": "mental_health",
+      "status": "scheduled",
+      "provider": "Dr. Williams",
+      "location": "Wellness Center, Suite 3B",
+      "description": "Quarterly mental health assessment",
+      "notes": null,
+      "created_at": "2026-02-10T08:30:00.000Z"
+    }
+  ]
+}

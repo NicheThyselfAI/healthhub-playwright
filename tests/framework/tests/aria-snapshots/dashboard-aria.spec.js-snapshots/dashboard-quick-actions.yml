@@ -1,0 +1,21 @@
+- heading "Quick Actions" [level=2]
+- link "Check Symptoms Start a symptom assessment":
+  - /url: /symptoms
+  - img
+  - paragraph: Check Symptoms
+  - paragraph: Start a symptom assessment
+- link "Book Appointment Schedule a new visit":
+  - /url: /appointments
+  - img
+  - paragraph: Book Appointment
+  - paragraph: Schedule a new visit
+- link "Manage Medications View and update medications":
+  - /url: /medications
+  - img
+  - paragraph: Manage Medications
+  - paragraph: View and update medications
+- link "View Records Access your health records":
+  - /url: /health-records
+  - img
+  - paragraph: View Records
+  - paragraph: Access your health records

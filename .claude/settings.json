@@ -1,0 +1,8 @@
+{
+  "skills": [
+    ".claude/skills/writing-tests",
+    ".claude/skills/writing-page-objects",
+    ".claude/skills/managing-test-data",
+    ".claude/skills/running-tests"
+  ]
+}

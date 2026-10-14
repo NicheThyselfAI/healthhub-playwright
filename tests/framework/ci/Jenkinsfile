@@ -1,0 +1,98 @@
+// ============================================================================
+// Jenkinsfile — Playwright Test Pipeline (Declarative)
+// ============================================================================
+//
+// Runs Playwright tests in Jenkins with:
+//   - Node.js setup
+//   - HTML report archival
+//   - Optional staging deployment
+//
+// Prerequisites:
+//   - NodeJS plugin installed
+//   - Docker or Playwright system deps on agent
+//
+// ============================================================================
+
+pipeline {
+    agent {
+        docker {
+            image 'mcr.microsoft.com/playwright:v1.50.0-noble'
+        }
+    }
+
+    environment {
+        CI = 'true'
+        TEST_ENV = 'local'
+    }
+
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['local', 'staging', 'uat'],
+            description: 'Target environment'
+        )
+        booleanParam(
+            name: 'SMOKE_ONLY',
+            defaultValue: false,
+            description: 'Run only smoke tests'
+        )
+    }
+
+    stages {
+        stage('Install') {
+            steps {
+                dir('healthhub-app/tests') {
+                    sh 'npm ci'
+                }
+                dir('healthhub-app/backend') {
+                    sh 'npm ci'
+                }
+                dir('healthhub-app/frontend') {
+                    sh 'npm ci'
+                }
+            }
+        }
+
+        stage('Test') {
+            environment {
+                TEST_ENV = "${params.ENVIRONMENT}"
+            }
+            steps {
+                dir('healthhub-app/tests') {
+                    script {
+                        def grepFlag = params.SMOKE_ONLY ? '--grep @smoke' : ''
+                        sh """
+                            npx playwright test \
+                                --config=framework/config/playwright.config.js \
+                                --project=chromium \
+                                ${grepFlag}
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Archive HTML report
+            publishHTML(target: [
+                reportDir: 'healthhub-app/tests/framework/playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'Playwright Report',
+                keepAll: true,
+                alwaysLinkToLastBuild: true
+            ])
+
+            // Archive test results
+            archiveArtifacts(
+                artifacts: 'healthhub-app/tests/framework/test-results/**/*',
+                allowEmptyArchive: true
+            )
+        }
+
+        failure {
+            echo 'Playwright tests failed. Check the HTML report for details.'
+        }
+    }
+}

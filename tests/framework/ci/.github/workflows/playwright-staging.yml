@@ -1,0 +1,56 @@
+# ============================================================================
+# GitHub Actions — Staging Playwright Tests
+# ============================================================================
+#
+# Runs smoke tests against the staging environment.
+# Triggered manually or on schedule.
+#
+# ============================================================================
+
+name: Staging Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 6am UTC
+    - cron: '0 6 * * *'
+
+jobs:
+  staging-tests:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: healthhub-app/tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: healthhub-app/tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: healthhub-app/tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests on staging
+        working-directory: healthhub-app/tests
+        run: npx playwright test --config=framework/config/playwright.config.js --project=chromium --grep @smoke
+        env:
+          CI: true
+          TEST_ENV: staging
+          BASE_URL: ${{ secrets.STAGING_URL }}
+          API_BASE_URL: ${{ secrets.STAGING_API_URL }}
+          TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-report
+          path: healthhub-app/tests/framework/playwright-report/
+          retention-days: 7

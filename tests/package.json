@@ -1,0 +1,28 @@
+{
+  "name": "healthhub-playwright-tests",
+  "version": "1.0.0",
+  "description": "Playwright test examples for HealthHub training application",
+  "type": "module",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:ui": "npx playwright test --ui",
+    "test:debug": "npx playwright test --debug",
+    "test:chromium": "npx playwright test --project=chromium",
+    "test:firefox": "npx playwright test --project=firefox",
+    "test:webkit": "npx playwright test --project=webkit",
+    "test:mobile": "npx playwright test --project='Mobile Chrome'",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
+    "@playwright/test": "^1.50.0",
+    "allure-commandline": "^2.37.0",
+    "allure-js-commons": "^3.4.5",
+    "allure-playwright": "^3.4.5",
+    "dotenv": "^17.3.1",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1"
+  }
+}

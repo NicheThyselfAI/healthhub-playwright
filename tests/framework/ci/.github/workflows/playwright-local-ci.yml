@@ -1,0 +1,124 @@
+# ============================================================================
+# GitHub Actions — Full Suite (Self-Hosted App, No External Server Needed)
+# ============================================================================
+#
+# TEMPORARY WORKFLOW — Use this until the app is hosted on nichethyself.com.
+#
+# How it works:
+#   1. Checks out the repo
+#   2. Installs backend + frontend dependencies
+#   3. Playwright's webServer config (TEST_ENV=local) automatically starts
+#      both the Express backend (port 3001) and Vite frontend (port 5173)
+#      before tests run, and stops them when done
+#   4. Runs the full framework test suite against the local servers
+#   5. Uploads the HTML report as a downloadable artifact
+#
+# Trigger: Manual only (workflow_dispatch) — run from the GitHub Actions tab
+#
+# Once the app is live on healthhub.nichethyself.com, switch to using
+# playwright-staging.yml instead and retire this workflow.
+#
+# ============================================================================
+
+name: Full Suite — App Starts Itself (Temp)
+
+on:
+  workflow_dispatch:
+    inputs:
+      grep:
+        description: 'Filter tests by tag (e.g. @smoke, @e2e, @aria) — leave blank to run all'
+        required: false
+        default: ''
+      browser:
+        description: 'Browser to run tests on'
+        required: false
+        default: 'chromium'
+        type: choice
+        options:
+          - chromium
+          - firefox
+          - webkit
+
+jobs:
+  test:
+    name: Playwright Tests (local app)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js setup ───────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: healthhub-app/tests/package-lock.json
+
+      # ── 3. Install all dependencies ────────────────────────────────────────
+      - name: Install test dependencies
+        working-directory: healthhub-app/tests
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: healthhub-app/backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: healthhub-app/frontend
+        run: npm ci
+
+      # ── 4. Install Playwright browsers ────────────────────────────────────
+      - name: Install Playwright browsers
+        working-directory: healthhub-app/tests
+        run: npx playwright install --with-deps ${{ github.event.inputs.browser || 'chromium' }}
+
+      # ── 5. Seed the database ───────────────────────────────────────────────
+      # Creates healthhub.db with the default test user before tests run.
+      # The webServer starts the backend after this step.
+      - name: Initialise and seed database
+        working-directory: healthhub-app/backend
+        run: node db/seed.js
+        env:
+          NODE_ENV: development
+          DB_PATH: ./data/healthhub.db
+          JWT_SECRET: ci-local-test-secret-not-for-production
+
+      # ── 6. Run Playwright tests ────────────────────────────────────────────
+      # TEST_ENV=local tells playwright.config.js to start both servers via
+      # webServer before tests run (Express on 3001, Vite on 5173).
+      - name: Run Playwright tests
+        working-directory: healthhub-app/tests
+        run: |
+          npx playwright test \
+            --config=framework/config/playwright.config.js \
+            --project=${{ github.event.inputs.browser || 'chromium' }} \
+            ${{ github.event.inputs.grep && format('--grep {0}', github.event.inputs.grep) || '' }}
+        env:
+          CI: true
+          TEST_ENV: local
+          # Backend reads these when webServer starts it
+          NODE_ENV: development
+          DB_PATH: ../backend/data/healthhub.db
+          JWT_SECRET: ci-local-test-secret-not-for-production
+
+      # ── 7. Upload HTML report ──────────────────────────────────────────────
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-local-ci
+          path: healthhub-app/tests/framework/playwright-report/
+          retention-days: 14
+
+      # ── 8. Upload traces on failure ────────────────────────────────────────
+      - name: Upload test results (traces, screenshots, videos)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-local-ci
+          path: healthhub-app/tests/framework/test-results/
+          retention-days: 7

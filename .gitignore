@@ -1,0 +1,43 @@
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ────────────────────────────────────────────
+frontend/dist/
+backend/public/
+
+# ── Database & uploads ───────────────────────────────────────
+backend/data/healthhub.db
+backend/data/uploads/
+
+# ── Environment files ────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Keep .env.production as a template (no secrets in it)
+!backend/.env.production
+
+# ── Playwright test artifacts ────────────────────────────────
+tests/playwright-report/
+tests/test-results/
+tests/blob-report/
+tests/allure-results/
+tests/framework/playwright-report/
+tests/framework/test-results/
+tests/framework/blob-report/
+
+# ── Deployment package ───────────────────────────────────────
+healthhub-deploy.zip
+
+# ── MCP config (contains secrets) ───────────────────────────
+.mcp.json
+
+# ── OS & editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+junit.xml

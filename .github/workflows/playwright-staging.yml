@@ -1,0 +1,291 @@
+# ============================================================================
+# WORKFLOW: Staging Tests
+# ============================================================================
+#
+# PURPOSE
+#   Runs the @smoke test suite against the live staging environment.
+#   This workflow does NOT start any servers — it points at an app that is
+#   already deployed and running on a real server.
+#   Use this once the app is hosted at a real URL (e.g. staging.healthhub.com).
+#
+# HOW THIS DIFFERS FROM THE OTHER TWO WORKFLOWS
+#   playwright.yml          → Push/PR gate. Starts the app itself (via webServer).
+#                             Runs on every commit. Sharded for speed.
+#   playwright-local-ci.yml → Manual full suite. Also starts the app itself.
+#                             Runs all browsers, generates Allure report.
+#   playwright-staging.yml  → Targets a real server. Does NOT start anything.
+#                             Only @smoke tests. No Allure — just a quick check.
+#
+# KEY IMPLICATION: NO BACKEND / FRONTEND npm ci
+#   The backend and frontend are running on the staging server, not on this runner.
+#   This workflow only needs the Playwright test runner — so only tests/package.json
+#   is installed. Backend and frontend packages are irrelevant here.
+#   This makes the workflow significantly faster: ~1 minute setup vs ~3 minutes.
+#
+# WHY ONLY @smoke ON STAGING?
+#   Smoke tests cover only the critical path (login, key pages load, key actions).
+#   Running the full suite against staging would:
+#   - Create and delete real data in the staging database
+#   - Take 10–15 minutes instead of 2–3 minutes
+#   - Risk polluting staging data if a test fails mid-cleanup
+#   - Consume staging resources for exhaustive tests that already ran on local CI
+#   The goal is a fast health check: "Is the deployment healthy?" not "Is every
+#   feature perfectly correct?" — the full suite answers that on local CI.
+#
+# CREDENTIALS
+#   Staging uses different login credentials than local development.
+#   These are stored as GitHub Secrets — never hardcoded in the workflow.
+#   A Secret is an encrypted value stored in GitHub that is injected at runtime.
+#   It appears as *** in all workflow logs — it cannot be seen even by admins.
+#   To manage secrets: GitHub repo → Settings → Secrets and variables → Actions
+#
+# ============================================================================
+
+name: Staging Tests
+
+# ── TRIGGER ──────────────────────────────────────────────────────────────────
+# This workflow has TWO triggers — manual and scheduled.
+# Both use the SAME job definition below (staging-tests).
+on:
+
+  workflow_dispatch:
+    # ── Manual trigger ──────────────────────────────────────────────────────
+    # Allows you to start this workflow yourself from the GitHub Actions tab.
+    # How to use: GitHub repo → Actions tab → "Staging Tests" → "Run workflow"
+    #
+    # Typical use cases:
+    #   - You just deployed a new version and want to check it immediately
+    #   - You fixed a staging-specific bug and want to verify it
+    #   - The daily schedule didn't run (e.g. GitHub Actions outage)
+    #
+    # workflow_dispatch with no inputs: creates a simple "Run workflow" button.
+    # You can add inputs (e.g. a browser selector) the same way as local-ci.yml
+    # if you want more control. For staging @smoke, inputs are rarely needed.
+
+  schedule:
+    # ── Scheduled trigger ───────────────────────────────────────────────────
+    # Runs automatically on a cron schedule without any human action.
+    # This provides a daily automated health check of the staging environment.
+    #
+    # CRON SYNTAX: 5 fields — minute  hour  day-of-month  month  day-of-week
+    #              Ranges:    0-59    0-23     1-31        1-12      0-7
+    #              * means "every valid value for this field"
+    #
+    # '0 6 * * *' broken down:
+    #   0     = at minute 0 (i.e. on the hour, not :15, :30 etc)
+    #   6     = at hour 06 (6am)
+    #   *     = any day of the month (1st, 2nd, 3rd ... 31st)
+    #   *     = any month (Jan, Feb ... Dec)
+    #   *     = any day of the week (Mon, Tue ... Sun)
+    #   Result: runs every day at 06:00 UTC
+    #
+    # GitHub Actions cron uses UTC time. If your team is in BST (UTC+1), 06:00 UTC
+    # is 07:00 BST — tests complete before the working day starts.
+    #
+    # Common cron patterns:
+    #   '0 6 * * *'     = daily at 6am UTC (every day)
+    #   '0 6 * * 1-5'   = weekdays only at 6am UTC (Mon–Fri)
+    #   '0 */6 * * *'   = every 6 hours (00:00, 06:00, 12:00, 18:00)
+    #   '0 6 * * 1'     = every Monday at 6am UTC (weekly check)
+    #   '*/15 * * * *'  = every 15 minutes (very frequent — use sparingly)
+    #
+    # NOTE: GitHub may delay scheduled runs by up to 15 minutes if runners are busy.
+    # Scheduled workflows that have had no activity for 60 days are disabled.
+    - cron: '0 6 * * *'
+
+# ── JOB: staging-tests ───────────────────────────────────────────────────────
+jobs:
+  staging-tests:
+
+    timeout-minutes: 15
+    # timeout-minutes: cancels the whole job if it hasn't finished in 15 minutes.
+    # @smoke tests typically complete in 2–5 minutes against a healthy environment.
+    # 15 minutes is deliberately generous to account for:
+    #   - Slow network round-trips to the staging server
+    #   - Occasional staging sluggishness (cold starts, DB queries, etc.)
+    # If staging tests consistently hit 15 minutes, something is wrong — investigate.
+
+    runs-on: ubuntu-latest
+    # ubuntu-latest: GitHub spins up a fresh Ubuntu Linux virtual machine for this run.
+    # Nothing from a previous run persists — clean state every time.
+    # Ubuntu is the cheapest and fastest option for headless browser testing.
+
+    steps:
+
+      # ── Step 1: Checkout ──────────────────────────────────────────────────
+      # Downloads the repository code onto the runner VM.
+      # This is ALWAYS the first step — without it there are no files to work with.
+      #
+      # We only need the test code from the tests/ folder.
+      # The backend/ and frontend/ folders are also checked out but never used —
+      # they exist in the repo but this workflow ignores them entirely.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Node.js setup ─────────────────────────────────────────────
+      # Installs Node.js v20 on the runner and configures the npm cache.
+      #
+      # node-version: 20
+      #   Uses Node.js v20 LTS (Long-Term Support). Matches the version used on
+      #   local development machines and the other CI workflows. Consistency
+      #   prevents "works on my machine" issues caused by different Node versions.
+      #
+      # cache: 'npm'
+      #   Enables caching of the npm package cache between runs.
+      #   First run: downloads all packages from the internet (slower).
+      #   Subsequent runs: restores the cache if package-lock.json is unchanged.
+      #   Saves 20–60 seconds per run.
+      #
+      # cache-dependency-path: tests/package-lock.json
+      #   The cache key is a hash of this file. If you add a new npm package,
+      #   package-lock.json changes → cache is invalidated → fresh download.
+      #   If the lock file hasn't changed → cache is used → faster run.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      # ── Step 3: Install test framework dependencies ───────────────────────
+      # Installs the Playwright test runner and all test utilities.
+      # Only tests/package.json is installed — NOT backend or frontend packages.
+      #
+      # WHY NOT install backend and frontend here?
+      #   Unlike playwright.yml and playwright-local-ci.yml, this workflow does NOT
+      #   start the app. The app is running on the staging server. This runner only
+      #   needs Playwright to send HTTP requests and control a browser.
+      #   Installing backend/frontend packages here would waste ~60–90 seconds
+      #   downloading packages that are never used.
+      #
+      # npm ci (clean install) vs npm install:
+      #   npm ci  → reads the exact versions from package-lock.json, deletes
+      #             node_modules and reinstalls from scratch. Deterministic.
+      #             Always use in CI — you get the same result every time.
+      #   npm install → resolves versions, may update lock file, slower.
+      #                 Use on your local machine when adding new packages.
+      - name: Install test dependencies
+        working-directory: tests
+        run: npm ci
+
+      # ── Step 4: Install Playwright browsers ──────────────────────────────
+      # Downloads the Chromium browser binary from Playwright's CDN.
+      # Browser binaries are NOT included in the npm package — they are separate
+      # ~200–300MB downloads. This step is required to launch a browser.
+      #
+      # WHY only Chromium (not Firefox or WebKit)?
+      #   @smoke tests are a fast health check. One browser is enough to confirm
+      #   the deployment is working. Full cross-browser coverage already runs in
+      #   playwright-local-ci.yml (manual dispatch).
+      #
+      # --with-deps:
+      #   Also installs Linux OS-level packages required by Chromium:
+      #   fonts, shared libraries (libX11, libglib, etc.).
+      #   A fresh Ubuntu runner has minimal OS packages. Without --with-deps,
+      #   Chromium would fail to launch with "error while loading shared libraries".
+      #   This flag is REQUIRED on Ubuntu runners — never omit it.
+      - name: Install Playwright browsers
+        working-directory: tests
+        run: npx playwright install --with-deps chromium
+
+      # ── Step 5: Run smoke tests against staging ───────────────────────────
+      # Runs only tests tagged @smoke against the already-deployed staging app.
+      #
+      # FLAGS EXPLAINED:
+      #
+      # --config=framework/config/playwright.config.js
+      #   Specifies which Playwright config file to use. The config reads TEST_ENV
+      #   to decide which environment settings to apply (URLs, webServer, etc.).
+      #
+      # --project=chromium
+      #   Runs tests in the Chromium browser only.
+      #   Browser projects are defined in playwright.config.js.
+      #
+      # --grep @smoke
+      #   Filters tests to only those whose title or describe block contains "@smoke".
+      #   All other tests (e.g. @e2e, @visual, @aria) are skipped entirely.
+      #   This keeps the run fast and focused on the critical path.
+      #
+      # ENVIRONMENT VARIABLES EXPLAINED:
+      #
+      # CI: true
+      #   Standard CI flag recognised by many tools including Playwright.
+      #   Playwright uses it to:
+      #     - Enforce headless mode (no display server on Linux — a visible window
+      #       would crash because there's no screen)
+      #     - Disable the interactive progress bar (not useful in log output)
+      #     - Apply stricter default timeouts
+      #
+      # TEST_ENV: staging
+      #   Read by playwright.config.js to select the staging environment.
+      #   "staging" tells the config to use BASE_URL and API_BASE_URL from
+      #   env vars instead of starting local servers via webServer.
+      #   This is the key difference from local CI runs (TEST_ENV: local).
+      #
+      # BASE_URL: ${{ secrets.STAGING_URL }}
+      #   The URL of the deployed staging frontend (e.g. https://staging.healthhub.com).
+      #   Playwright uses this as the base for page.goto('/appointments') etc.
+      #   Stored as a Secret so it isn't visible in the workflow file or logs.
+      #
+      # API_BASE_URL: ${{ secrets.STAGING_API_URL }}
+      #   The URL of the staging API server (e.g. https://api.staging.healthhub.com).
+      #   Used by the apiClient in tests for direct API calls (test data setup).
+      #
+      # TEST_EMAIL / TEST_PASSWORD: ${{ secrets.STAGING_TEST_EMAIL/PASSWORD }}
+      #   Credentials for the test user account on staging.
+      #   These are DIFFERENT from local dev credentials (admin@healthhub.com / admin123).
+      #   Staging should have a dedicated test account that can be safely used by CI.
+      #
+      # HOW SECRETS WORK AT RUNTIME:
+      #   ${{ secrets.STAGING_URL }} is replaced by GitHub with the actual secret value
+      #   before the step runs. The value is never written to the workflow file.
+      #   In logs, any accidental echo of the value is automatically redacted to ***.
+      #   Secrets are only available to workflow runs on the correct repository —
+      #   forks cannot access parent repository secrets (important security property).
+      - name: Run smoke tests on staging
+        working-directory: tests
+        run: npx playwright test --config=framework/config/playwright.config.js --project=chromium --grep @smoke
+        env:
+          CI: true
+          TEST_ENV: staging
+          BASE_URL: ${{ secrets.STAGING_URL }}
+          API_BASE_URL: ${{ secrets.STAGING_API_URL }}
+          TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+
+      # ── Step 6: Upload test report ────────────────────────────────────────
+      # Uploads the Playwright HTML report as a downloadable artifact.
+      # The report contains pass/fail status, error messages, screenshots, traces.
+      #
+      # if: ${{ !cancelled() }}
+      #   Runs this step even if the previous step (tests) failed.
+      #   You NEED the report most when tests fail — that's when you diagnose issues.
+      #   Without this condition, a test failure would skip the upload, leaving you
+      #   with no report to examine.
+      #   Note: !cancelled() is NOT the same as always():
+      #     always()      = runs even if the job was manually cancelled
+      #     !cancelled()  = runs on pass AND fail, but NOT on manual cancellation
+      #   Manual cancellation means something went wrong with the run setup itself
+      #   (e.g. wrong secrets) — uploading a partial/empty report isn't useful then.
+      #
+      # name: staging-report
+      #   The artifact is downloadable from the GitHub Actions run summary page.
+      #   Click the run → scroll to "Artifacts" → download staging-report.zip.
+      #   Unzip and open index.html in a browser to see the full report.
+      #
+      # path: tests/framework/playwright-report/
+      #   Location where Playwright writes the HTML report.
+      #   Defined in playwright.config.js under reporter: [['html', { outputFolder }]].
+      #
+      # retention-days: 7
+      #   Keeps the artifact for 7 days then deletes it automatically.
+      #   Shorter than the 14-day retention on local CI because staging tests
+      #   run daily and reports accumulate quickly. 7 days gives you a week
+      #   to investigate any failure before the report is gone.
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-report
+          path: tests/framework/playwright-report/
+          retention-days: 7
