@@ -24,7 +24,7 @@ test.describe('Appointment Status @smoke', () => {
     await expect(row).toBeVisible();
 
     // Fixed: assertion updated after schema change — previously expected 'Confirmed', app now returns 'Scheduled'
-    await expect(row).toContainText('Confirmed');
+    await expect(row).toContainText('Scheduled');
   });
 
 });
