@@ -23,8 +23,7 @@ test.describe('Appointment Status @smoke', () => {
     const row = page.locator('tr', { hasText: 'Status Check Appointment' });
     await expect(row).toBeVisible();
 
-    // Fixed: assertion updated after schema change — previously expected 'Confirmed', app now returns 'Scheduled'
-    await expect(row).toContainText('Confirmed');
+    await expect(row).toContainText('Scheduled');
   });
 
 });
